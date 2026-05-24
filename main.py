@@ -1,8 +1,11 @@
+import os
+import shutil
+import subprocess
+import tempfile
 import tkinter as tk
 from datetime import datetime
 import locale
 
-from utils.updater import hay_actualizacion, descargar_actualizacion
 from tkinter import messagebox
 
 from ui.tutores_ui      import mostrar_tutores
@@ -12,6 +15,11 @@ from ui.listados_ui     import mostrar_tutores_con_alumnos, mostrar_categorias_c
 from ui.recibos_ui      import mostrar_recibos, mostrar_pago_cuotas, mostrar_pagos_varios
 from models.stats       import obtener_stats
 from utils.rutas        import resource_path
+from utils.updater      import hay_actualizacion, descargar_actualizacion
+from utils.backup       import (
+    hacer_backup, restaurar_backup,
+    listar_backups, abrir_carpeta_backups, formatear_nombre_backup
+)
 
 
 # ══════════════════════════════════════════════
@@ -135,6 +143,136 @@ def construir_boton_dashboard(parent, texto, content,
     btn.pack(fill="x", pady=6, padx=18)
     btn.bind("<Enter>", lambda e: btn.config(bg="#dde3ea", fg="#1e2a44"))
     btn.bind("<Leave>", lambda e: btn.config(bg="#f0f2f5", fg="#2c3e50"))
+
+
+# ══════════════════════════════════════════════
+# BACKUPS
+# ══════════════════════════════════════════════
+def abrir_ventana_backups(root):
+    v = tk.Toplevel()
+    v.title("Backups")
+    v.grab_set()
+    v.resizable(False, False)
+    v.update_idletasks()
+    ancho, alto = 520, 420
+    sw = v.winfo_screenwidth()
+    sh = v.winfo_screenheight()
+    v.geometry(f"{ancho}x{alto}+{(sw - ancho) // 2}+{(sh - alto) // 2}")
+
+    header = tk.Frame(v, bg="#2c3e50")
+    header.pack(fill="x")
+    tk.Label(header, text="Gestión de Backups", font=("Arial", 13, "bold"),
+             bg="#2c3e50", fg="white").pack(side="left", padx=16, pady=10)
+
+    # — Crear backup manual —
+    frame_crear = tk.LabelFrame(v, text="Crear backup ahora",
+                                font=("Arial", 9, "bold"), padx=10, pady=8)
+    frame_crear.pack(fill="x", padx=16, pady=(12, 6))
+
+    tk.Label(frame_crear,
+             text="Guardá una copia de seguridad de todos los datos actuales.",
+             font=("Arial", 9), fg="#555").pack(anchor="w", pady=(0, 6))
+
+    btn_crear = tk.Button(frame_crear, text="💾 Crear backup manual",
+                          bg="#27ae60", fg="white", font=("Arial", 10, "bold"),
+                          relief="groove", padx=12, pady=5, cursor="hand2",
+                          command=lambda: _on_crear_backup(lista_box, lbl_estado))
+    btn_crear.pack(side="left")
+    btn_crear.bind("<Enter>", lambda e: btn_crear.config(bg="#1e8449"))
+    btn_crear.bind("<Leave>", lambda e: btn_crear.config(bg="#27ae60"))
+
+    btn_carpeta = tk.Button(frame_crear, text="📂 Abrir carpeta",
+                            bg="#2980b9", fg="white", font=("Arial", 10, "bold"),
+                            relief="groove", padx=12, pady=5, cursor="hand2",
+                            command=abrir_carpeta_backups)
+    btn_carpeta.pack(side="left", padx=(8, 0))
+    btn_carpeta.bind("<Enter>", lambda e: btn_carpeta.config(bg="#1f618d"))
+    btn_carpeta.bind("<Leave>", lambda e: btn_carpeta.config(bg="#2980b9"))
+
+    # — Lista de backups disponibles —
+    frame_lista = tk.LabelFrame(v, text="Backups disponibles (más reciente primero)",
+                                font=("Arial", 9, "bold"), padx=10, pady=8)
+    frame_lista.pack(fill="both", expand=True, padx=16, pady=(0, 6))
+
+    scroll = tk.Scrollbar(frame_lista)
+    scroll.pack(side="right", fill="y")
+
+    lista_box = tk.Listbox(frame_lista, yscrollcommand=scroll.set,
+                           font=("Arial", 10), selectmode="single",
+                           activestyle="dotbox", height=8)
+    lista_box.pack(fill="both", expand=True)
+    scroll.config(command=lista_box.yview)
+
+    lbl_estado = tk.Label(v, text="", font=("Arial", 9), fg="#27ae60")
+    lbl_estado.pack(pady=(0, 4))
+
+    _poblar_lista_backups(lista_box)
+
+    # — Restaurar —
+    pie = tk.Frame(v)
+    pie.pack(pady=(0, 12))
+
+    btn_restaurar = tk.Button(pie, text="🔄 Restaurar seleccionado",
+                              bg="#e67e22", fg="white", font=("Arial", 10, "bold"),
+                              relief="groove", padx=12, pady=5, cursor="hand2",
+                              command=lambda: _on_restaurar_backup(lista_box, lbl_estado, v))
+    btn_restaurar.pack(side="left", padx=8)
+    btn_restaurar.bind("<Enter>", lambda e: btn_restaurar.config(bg="#ca6f1e"))
+    btn_restaurar.bind("<Leave>", lambda e: btn_restaurar.config(bg="#e67e22"))
+
+    btn_cerrar = tk.Button(pie, text="✕ Cerrar", bg="#7f8c8d", fg="white",
+                           font=("Arial", 10, "bold"), relief="groove",
+                           padx=12, pady=5, cursor="hand2", command=v.destroy)
+    btn_cerrar.pack(side="left", padx=8)
+    btn_cerrar.bind("<Enter>", lambda e: btn_cerrar.config(bg="#626f70"))
+    btn_cerrar.bind("<Leave>", lambda e: btn_cerrar.config(bg="#7f8c8d"))
+
+
+def _poblar_lista_backups(lista_box):
+    lista_box.delete(0, tk.END)
+    archivos = listar_backups()
+    if not archivos:
+        lista_box.insert(tk.END, "  No hay backups disponibles")
+    else:
+        for nombre in archivos:
+            lista_box.insert(tk.END, f"  {formatear_nombre_backup(nombre)}")
+
+
+def _on_crear_backup(lista_box, lbl_estado):
+    ok = hacer_backup(manual=True)
+    if ok:
+        lbl_estado.config(text="✅ Backup creado correctamente.", fg="#27ae60")
+        _poblar_lista_backups(lista_box)
+    else:
+        lbl_estado.config(text="❌ No se pudo crear el backup.", fg="#e74c3c")
+
+
+def _on_restaurar_backup(lista_box, lbl_estado, ventana):
+    idx = lista_box.curselection()
+    if not idx:
+        messagebox.showwarning("Sin selección",
+                               "Seleccioná un backup de la lista primero.")
+        return
+    archivos     = listar_backups()
+    nombre       = archivos[idx[0]]
+    nombre_fmt   = formatear_nombre_backup(nombre)
+    confirmacion = messagebox.askyesno(
+        "Restaurar backup",
+        f"¿Restaurar el backup:\n{nombre_fmt}?\n\n"
+        "⚠ Esto reemplazará todos los datos actuales.\n"
+        "Se recomienda hacer un backup antes de continuar."
+    )
+    if confirmacion:
+        ok = restaurar_backup(nombre)
+        if ok:
+            messagebox.showinfo(
+                "Restauración exitosa",
+                "✅ Backup restaurado correctamente.\n"
+                "Reiniciá la aplicación para ver los cambios."
+            )
+            ventana.destroy()
+        else:
+            lbl_estado.config(text="❌ No se pudo restaurar el backup.", fg="#e74c3c")
 
 
 # ══════════════════════════════════════════════
@@ -336,6 +474,17 @@ def construir_sidebar(main_frame, content, botones_acciones, botones_listados, r
     btn_salir.bind("<Enter>", lambda e: btn_salir.config(bg="#c0392b"))
     btn_salir.bind("<Leave>", lambda e: btn_salir.config(bg="#e74c3c"))
 
+    btn_backup = tk.Button(
+        sidebar, text="💾  Backups",
+        bg="#2980b9", fg="white", relief="flat",
+        font=("Arial", 10, "bold"), anchor="w", padx=16, pady=6,
+        cursor="hand2",
+        command=lambda: abrir_ventana_backups(root)
+    )
+    btn_backup.pack(side="bottom", fill="x", padx=10, pady=(0, 4))
+    btn_backup.bind("<Enter>", lambda e: btn_backup.config(bg="#1f618d"))
+    btn_backup.bind("<Leave>", lambda e: btn_backup.config(bg="#2980b9"))
+
     def toggle_sidebar():
         if estado["expandido"]:
             sidebar.config(width=ANCHO_COLAPSADO)
@@ -389,6 +538,7 @@ def main():
             descargar_actualizacion()
             root.destroy()
 
+    hacer_backup(manual=False)
     root.mainloop()
 
 if __name__ == "__main__":

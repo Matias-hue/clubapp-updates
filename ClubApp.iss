@@ -1,5 +1,5 @@
 #define MyAppName      "Club Siglo XXI"
-#define MyAppVersion   "1.0"
+#define MyAppVersion   "1.0.3"
 #define MyAppExeName   "ClubApp.exe"
 #define MyAppPublisher "Club Siglo XXI"
 

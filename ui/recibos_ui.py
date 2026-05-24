@@ -832,9 +832,20 @@ def abrir_crear_recibos_multiples(contenedor_tabla, filtro_tipo=None):
     modal = tk.Toplevel()
     modal.title("Recibos Múltiples")
     modal.grab_set()
-    centrar(modal, 1000, 740)
     modal.resizable(True, True)
+    modal.minsize(800, 600)
 
+    # Centrar adaptándose a la pantalla disponible
+    modal.update_idletasks()
+    sw      = modal.winfo_screenwidth()
+    sh      = modal.winfo_screenheight()
+    ancho   = min(1000, sw - 80)
+    alto    = min(740,  sh - 80)
+    x       = (sw - ancho) // 2
+    y       = (sh - alto)  // 2
+    modal.geometry(f"{ancho}x{alto}+{x}+{y}")
+
+    # ── Título ────────────────────────────────────────────────────────────
     tk.Label(modal, text="Crear Recibos para Múltiples Alumnos",
              font=("Arial", 14, "bold"), pady=10).pack()
 
@@ -922,24 +933,9 @@ def abrir_crear_recibos_multiples(contenedor_tabla, filtro_tipo=None):
     btn_ninguno.pack(side="left", padx=4)
     _aplicar_hover(btn_ninguno, "#e74c3c", "#c0392b")
 
-    # ── Tabla alumnos ─────────────────────────────────────────────────────
-    panel_tabla = tk.LabelFrame(modal, text="Alumnos Activos",
-                                font=("Arial", 10, "bold"), padx=6, pady=6)
-    panel_tabla.pack(fill="both", expand=True, padx=16, pady=(0, 6))
-    outer_t, frame_tabla = crear_tabla_scroll(panel_tabla)
-    outer_t.pack(fill="both", expand=True)
-
-    todos_alumnos = obtener_alumnos()
-    enriquecer_alumnos(todos_alumnos)
-    tutores    = obtener_tutores()
-    filas_data = []
-
-    _poblar_tabla_multi(frame_tabla, todos_alumnos, filas_data,
-                        combo_tipo.current() == 0, lbl_sel)
-
-    # ── Botones ───────────────────────────────────────────────────────────
+    # ── Botones (ANTES de la tabla para que siempre sean visibles) ─────────
     br = tk.Frame(modal)
-    br.pack(pady=10)
+    br.pack(side="bottom", pady=10)
 
     btn_guardar = tk.Button(br, text="💾 Guardar Recibos", bg="#27ae60", fg="white",
                             font=("Arial", 10, "bold"), relief="groove",
@@ -963,6 +959,21 @@ def abrir_crear_recibos_multiples(contenedor_tabla, filtro_tipo=None):
                              command=modal.destroy)
     btn_cancelar.pack(side="left", padx=8)
     _aplicar_hover(btn_cancelar, "#7f8c8d", "#626f70")
+
+    # ── Tabla alumnos (se empaqueta DESPUÉS de los botones) ───────────────
+    panel_tabla = tk.LabelFrame(modal, text="Alumnos Activos",
+                                font=("Arial", 10, "bold"), padx=6, pady=6)
+    panel_tabla.pack(fill="both", expand=True, padx=16, pady=(0, 4))
+    outer_t, frame_tabla = crear_tabla_scroll(panel_tabla)
+    outer_t.pack(fill="both", expand=True)
+
+    todos_alumnos = obtener_alumnos()
+    enriquecer_alumnos(todos_alumnos)
+    tutores    = obtener_tutores()
+    filas_data = []
+
+    _poblar_tabla_multi(frame_tabla, todos_alumnos, filas_data,
+                        combo_tipo.current() == 0, lbl_sel)
 
     # ── Bindings ──────────────────────────────────────────────────────────
     combo_tipo.bind(

@@ -381,17 +381,13 @@ def main():
     mostrar_dashboard(content, botones_acciones, botones_listados)
 
     if hay_actualizacion():
-
         respuesta = messagebox.askyesno(
-            "Actualización",
-            "Hay una nueva versión disponible.\n¿Desea actualizar?"
+            "Actualización disponible",
+            "Hay una nueva versión disponible.\n¿Deseas actualizar ahora?"
         )
-
-    if respuesta:
-
-        descargar_actualizacion()
-
-        root.destroy()
+        if respuesta:
+            descargar_actualizacion()
+            root.destroy()
 
     root.mainloop()
 

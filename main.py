@@ -2,6 +2,9 @@ import tkinter as tk
 from datetime import datetime
 import locale
 
+from utils.updater import hay_actualizacion, descargar_actualizacion
+from tkinter import messagebox
+
 from ui.tutores_ui      import mostrar_tutores
 from ui.alumnos_ui      import mostrar_alumnos
 from ui.categorias_ui   import mostrar_categorias
@@ -377,8 +380,20 @@ def main():
     content.pack(side="right", fill="both", expand=True)
     mostrar_dashboard(content, botones_acciones, botones_listados)
 
-    root.mainloop()
+    if hay_actualizacion():
 
+        respuesta = messagebox.askyesno(
+            "Actualización",
+            "Hay una nueva versión disponible.\n¿Desea actualizar?"
+        )
+
+    if respuesta:
+
+        descargar_actualizacion()
+
+        root.destroy()
+
+    root.mainloop()
 
 if __name__ == "__main__":
     main()

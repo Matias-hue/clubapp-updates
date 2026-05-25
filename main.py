@@ -535,8 +535,7 @@ def main():
             "Hay una nueva versión disponible.\n¿Deseas actualizar ahora?"
         )
         if respuesta:
-            descargar_actualizacion()
-            root.destroy()
+            descargar_actualizacion(root=root)
 
     hacer_backup(manual=False)
     root.mainloop()

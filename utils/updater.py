@@ -46,37 +46,22 @@ def hay_actualizacion():
     return resultado
 
 
-def descargar_actualizacion():
-
+def descargar_actualizacion(root=None):
     resultado = False
-
-    online = obtener_version_online()
-
+    online    = obtener_version_online()
     if online:
-
         try:
-
-            url = online["download_url"]
-
-            carpeta_temp = tempfile.gettempdir()
-
-            ruta_instalador = os.path.join(
-                carpeta_temp,
-                "ClubApp_Update.exe"
-            )
-
-            response = requests.get(url, stream=True)
-
+            url              = online["download_url"]
+            carpeta_temp     = tempfile.gettempdir()
+            ruta_instalador  = os.path.join(carpeta_temp, "ClubApp_Update.exe")
+            response         = requests.get(url, stream=True)
             with open(ruta_instalador, "wb") as archivo:
-
                 for chunk in response.iter_content(chunk_size=8192):
                     archivo.write(chunk)
-
             subprocess.Popen([ruta_instalador])
-
             resultado = True
-
+            if root is not None:
+                root.destroy()
         except Exception:
             resultado = False
-
     return resultado

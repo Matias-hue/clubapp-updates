@@ -60,8 +60,8 @@ def _actualizar_color_mes(var, cell, cb_ref):
     cell.config(bg=nuevo_bg)
     cb_ref.config(bg=nuevo_bg, fg=nuevo_fg,
                   selectcolor=nuevo_bg, activebackground=nuevo_bg)
-    
-    
+
+
 # ══════════════════════════════════════════════
 # CONSTANTES
 # ══════════════════════════════════════════════
@@ -211,7 +211,7 @@ def abrir_envio_gmail_masivo(ids_seleccionados):
 # ══════════════════════════════════════════════
 # SELECTOR DE MESES
 # ══════════════════════════════════════════════
-def crear_selector_meses(parent, mes_actual_idx=None):
+def crear_selector_meses(parent, mes_actual_idx=None, on_change=None):
     frame    = tk.LabelFrame(parent, text="Meses a pagar",
                              font=("Arial", 10, "bold"), padx=8, pady=6)
     vars_mes = []
@@ -219,6 +219,8 @@ def crear_selector_meses(parent, mes_actual_idx=None):
         idx_real = MESES.index(mes)
         var      = tk.BooleanVar(value=(idx_real == mes_actual_idx))
         cb       = tk.Checkbutton(frame, text=mes.capitalize(), variable=var)
+        if on_change:
+            cb.config(command=on_change)
         cb.grid(row=i // 3, column=i % 3, sticky="w", padx=6, pady=2)
         vars_mes.append(var)
     return frame, vars_mes
@@ -259,6 +261,141 @@ def crear_selector_meses_horizontal(parent, mes_actual_idx=None):
 def _meses_seleccionados(vars_mes):
     resultado = [MESES_VISIBLES[i] for i, v in enumerate(vars_mes) if v.get()]
     return resultado
+
+
+# ══════════════════════════════════════════════
+# AJUSTE DE MORA/DESC POR MES (ventana auxiliar)
+# ══════════════════════════════════════════════
+def _construir_overrides_desde_defaults(meses_sel, monto_default,
+                                         desc_default, modo_desc_default,
+                                         mora_default, modo_mora_default):
+    """Crea la estructura de overrides pre-cargada con los valores del formulario."""
+    resultado = {}
+    for mes in meses_sel:
+        resultado[mes] = {
+            "monto":     monto_default,
+            "desc":      desc_default,
+            "modo_desc": modo_desc_default,
+            "mora":      mora_default,
+            "modo_mora": modo_mora_default,
+        }
+    return resultado
+
+
+def abrir_ajuste_por_mes(parent, meses_sel, monto_default,
+                          desc_default, modo_desc_default,
+                          mora_default, modo_mora_default,
+                          overrides_actuales, callback_confirmar):
+    """
+    Abre ventana para ajustar mora/desc/monto por cada mes seleccionado.
+    overrides_actuales: dict mes -> {monto, desc, modo_desc, mora, modo_mora}
+    callback_confirmar: función que recibe el dict actualizado al confirmar.
+    """
+    v = tk.Toplevel(parent)
+    v.title("Ajustar valores por mes")
+    v.grab_set()
+    v.resizable(False, False)
+
+    n_meses = len(meses_sel)
+    alto    = min(120 + n_meses * 38 + 80, 520)
+    centrar(v, 620, alto)
+
+    tk.Label(v, text="Ajuste de Mora y Descuento por Mes",
+             font=("Arial", 12, "bold"), pady=10).pack()
+    tk.Label(v,
+             text="Modificá los valores que necesites. Los demás se mantienen igual.",
+             font=("Arial", 9), fg="#555").pack(pady=(0, 8))
+
+    # ── Tabla ──────────────────────────────────────────────────────────────
+    frame_tabla = tk.Frame(v, padx=16)
+    frame_tabla.pack(fill="x")
+
+    headers = ["Mes", "Monto ($)", "Descuento", "Modo D.", "Mora", "Modo M."]
+    for col, h in enumerate(headers):
+        tk.Label(frame_tabla, text=h, bg="#2c3e50", fg="white",
+                 font=("Arial", 9, "bold"), padx=8, pady=5, width=10).grid(
+            row=0, column=col, sticky="nsew", padx=1, pady=1)
+
+    entries_por_mes = {}
+    for i, mes in enumerate(meses_sel, start=1):
+        bg      = fila_color(i)
+        vals_mes = overrides_actuales.get(mes, {
+            "monto":     monto_default,
+            "desc":      desc_default,
+            "modo_desc": modo_desc_default,
+            "mora":      mora_default,
+            "modo_mora": modo_mora_default,
+        })
+
+        tk.Label(frame_tabla, text=mes.capitalize(), bg=bg,
+                 font=("Arial", 9, "bold"), padx=8, pady=6, width=10).grid(
+            row=i, column=0, sticky="nsew", padx=1, pady=1)
+
+        e_monto = tk.Entry(frame_tabla, width=10, relief="groove")
+        e_monto.insert(0, str(vals_mes.get("monto", monto_default)))
+        e_monto.grid(row=i, column=1, padx=4, pady=3)
+
+        e_desc = tk.Entry(frame_tabla, width=10, relief="groove")
+        e_desc.insert(0, str(vals_mes.get("desc", desc_default)))
+        e_desc.grid(row=i, column=2, padx=4, pady=3)
+
+        cb_modo_desc = ttk.Combobox(frame_tabla, state="readonly",
+                                    values=["$", "%"], width=4)
+        cb_modo_desc.set(vals_mes.get("modo_desc", modo_desc_default))
+        cb_modo_desc.grid(row=i, column=3, padx=4, pady=3)
+
+        e_mora = tk.Entry(frame_tabla, width=10, relief="groove")
+        e_mora.insert(0, str(vals_mes.get("mora", mora_default)))
+        e_mora.grid(row=i, column=4, padx=4, pady=3)
+
+        cb_modo_mora = ttk.Combobox(frame_tabla, state="readonly",
+                                    values=["$", "%"], width=4)
+        cb_modo_mora.set(vals_mes.get("modo_mora", modo_mora_default))
+        cb_modo_mora.grid(row=i, column=5, padx=4, pady=3)
+
+        entries_por_mes[mes] = {
+            "e_monto":     e_monto,
+            "e_desc":      e_desc,
+            "cb_modo_desc": cb_modo_desc,
+            "e_mora":      e_mora,
+            "cb_modo_mora": cb_modo_mora,
+        }
+
+    # ── Botones ────────────────────────────────────────────────────────────
+    br = tk.Frame(v)
+    br.pack(pady=14)
+
+    btn_confirmar = tk.Button(
+        br, text="✔ Confirmar", bg="#27ae60", fg="white",
+        font=("Arial", 10, "bold"), relief="groove",
+        padx=14, pady=5, cursor="hand2",
+        command=lambda: _on_confirmar_ajuste(
+            v, entries_por_mes, callback_confirmar))
+    btn_confirmar.pack(side="left", padx=8)
+    _aplicar_hover(btn_confirmar, "#27ae60", "#1e8449")
+
+    btn_cancelar = tk.Button(
+        br, text="✕ Cancelar", bg="#7f8c8d", fg="white",
+        font=("Arial", 10, "bold"), relief="groove",
+        padx=14, pady=5, cursor="hand2",
+        command=v.destroy)
+    btn_cancelar.pack(side="left", padx=8)
+    _aplicar_hover(btn_cancelar, "#7f8c8d", "#626f70")
+
+
+def _on_confirmar_ajuste(ventana, entries_por_mes, callback_confirmar):
+    """Lee los entries de la ventana de ajuste y llama al callback con el dict."""
+    resultado = {}
+    for mes, widgets in entries_por_mes.items():
+        resultado[mes] = {
+            "monto":     widgets["e_monto"].get().strip(),
+            "desc":      widgets["e_desc"].get().strip(),
+            "modo_desc": widgets["cb_modo_desc"].get(),
+            "mora":      widgets["e_mora"].get().strip(),
+            "modo_mora": widgets["cb_modo_mora"].get(),
+        }
+    ventana.destroy()
+    callback_confirmar(resultado)
 
 
 # ══════════════════════════════════════════════
@@ -439,7 +576,7 @@ def _on_guardar_recibo_individual(modal, contenedor_tabla, filtro_tipo,
                                    entry_desc, entry_mora, combo_forma,
                                    entry_descripcion, entry_emisor,
                                    var_parcial, entry_monto_pagado,
-                                   tutores,
+                                   tutores, overrides_ref,
                                    modo_desc="$", modo_mora="$"):
     alumnos_ref = getattr(combo_alumno, "_alumnos_filtrados", [])
     meses_sel   = _meses_seleccionados(vars_mes)
@@ -454,21 +591,63 @@ def _on_guardar_recibo_individual(modal, contenedor_tabla, filtro_tipo,
         return
 
     try:
-        datos = parsear_recibo_individual(
-            combo_tipo, combo_forma, entry_fecha,
-            entry_monto, entry_desc, entry_mora,
-            entry_descripcion, entry_emisor,
-            var_parcial, entry_monto_pagado,
-            FORMAS_PAGO,
-            modo_desc=modo_desc,
-            modo_mora=modo_mora,
-        )
-        nuevos_ids = guardar_recibo_individual(
-            alumnos_ref[combo_alumno.current()],
-            tutores[combo_tutor.current()],
-            datos,
-            meses_sel
-        )
+        # Si hay overrides por mes, guardar cada mes con sus propios valores.
+        # Si no hay overrides, usar el comportamiento original (un dict vacío).
+        overrides = overrides_ref[0]
+
+        if overrides and len(meses_sel) > 1:
+            nuevos_ids = []
+            errores    = []
+            for mes in meses_sel:
+                vals_mes = overrides.get(mes, {})
+                entry_monto.delete(0, tk.END)
+                entry_monto.insert(0, vals_mes.get("monto", entry_monto.get()))
+                entry_desc.delete(0, tk.END)
+                entry_desc.insert(0, vals_mes.get("desc", "0"))
+                entry_mora.delete(0, tk.END)
+                entry_mora.insert(0, vals_mes.get("mora", "0"))
+                modo_desc_mes = vals_mes.get("modo_desc", modo_desc)
+                modo_mora_mes = vals_mes.get("modo_mora", modo_mora)
+                try:
+                    datos = parsear_recibo_individual(
+                        combo_tipo, combo_forma, entry_fecha,
+                        entry_monto, entry_desc, entry_mora,
+                        entry_descripcion, entry_emisor,
+                        var_parcial, entry_monto_pagado,
+                        FORMAS_PAGO,
+                        modo_desc=modo_desc_mes,
+                        modo_mora=modo_mora_mes,
+                    )
+                    ids_mes = guardar_recibo_individual(
+                        alumnos_ref[combo_alumno.current()],
+                        tutores[combo_tutor.current()],
+                        datos,
+                        [mes]
+                    )
+                    nuevos_ids.extend(ids_mes)
+                except Exception as e:
+                    errores.append(f"{mes.capitalize()}: {e}")
+
+            if errores:
+                messagebox.showerror("Errores al guardar", "\n".join(errores))
+                return
+        else:
+            datos = parsear_recibo_individual(
+                combo_tipo, combo_forma, entry_fecha,
+                entry_monto, entry_desc, entry_mora,
+                entry_descripcion, entry_emisor,
+                var_parcial, entry_monto_pagado,
+                FORMAS_PAGO,
+                modo_desc=modo_desc,
+                modo_mora=modo_mora,
+            )
+            nuevos_ids = guardar_recibo_individual(
+                alumnos_ref[combo_alumno.current()],
+                tutores[combo_tutor.current()],
+                datos,
+                meses_sel
+            )
+
         modal.destroy()
         _construir_tabla_recibos(contenedor_tabla, filtro_tipo=filtro_tipo)
         n = len(nuevos_ids)
@@ -481,6 +660,81 @@ def _on_guardar_recibo_individual(modal, contenedor_tabla, filtro_tipo,
         messagebox.showerror("Error", str(e))
     except Exception as e:
         messagebox.showerror("Error", str(e))
+
+
+def _actualizar_boton_ajuste(vars_mes, btn_ajuste, lbl_aviso, overrides_ref):
+    """Muestra/oculta el botón de ajuste según la cantidad de meses seleccionados."""
+    n_sel     = sum(1 for v in vars_mes if v.get())
+    overrides = overrides_ref[0]
+    tiene_overrides = bool(overrides)
+
+    if n_sel > 1:
+        btn_ajuste.grid()
+        lbl_aviso.grid()
+        if tiene_overrides:
+            btn_ajuste.config(text="⚙ Ajustar por mes ✓", bg="#1e8449")
+        else:
+            btn_ajuste.config(text="⚙ Ajustar por mes", bg="#2980b9")
+    else:
+        btn_ajuste.grid_remove()
+        lbl_aviso.grid_remove()
+
+
+def _on_cambio_mora_desc_principal(entry_mora, entry_desc,
+                                    combo_modo_mora, combo_modo_desc,
+                                    overrides_ref, vars_mes,
+                                    btn_ajuste, lbl_aviso):
+    """
+    Se llama cuando el usuario cambia mora o desc en el formulario principal.
+    Si ya hay overrides personalizados, pregunta si quiere sobreescribirlos.
+    """
+    overrides = overrides_ref[0]
+    if not overrides:
+        return
+
+    respuesta = messagebox.askyesno(
+        "Valores personalizados por mes",
+        "Ya ajustaste los valores por mes.\n"
+        "¿Querés reemplazarlos con este nuevo valor para todos los meses?"
+    )
+    if respuesta:
+        overrides_ref[0] = {}
+        _actualizar_boton_ajuste(vars_mes, btn_ajuste, lbl_aviso, overrides_ref)
+
+
+def _on_abrir_ajuste_por_mes(modal, vars_mes, entry_monto, entry_desc,
+                              combo_modo_desc, entry_mora, combo_modo_mora,
+                              overrides_ref, btn_ajuste, lbl_aviso):
+    """Callback del botón 'Ajustar por mes'."""
+    meses_sel = _meses_seleccionados(vars_mes)
+    if not meses_sel:
+        messagebox.showwarning("Sin meses", "Seleccioná al menos un mes.")
+        return
+
+    overrides_actuales = overrides_ref[0] or _construir_overrides_desde_defaults(
+        meses_sel,
+        entry_monto.get().strip(),
+        entry_desc.get().strip(),
+        combo_modo_desc.get(),
+        entry_mora.get().strip(),
+        combo_modo_mora.get(),
+    )
+
+    def callback_confirmar(nuevo_override):
+        overrides_ref[0] = nuevo_override
+        _actualizar_boton_ajuste(vars_mes, btn_ajuste, lbl_aviso, overrides_ref)
+
+    abrir_ajuste_por_mes(
+        modal,
+        meses_sel,
+        entry_monto.get().strip(),
+        entry_desc.get().strip(),
+        combo_modo_desc.get(),
+        entry_mora.get().strip(),
+        combo_modo_mora.get(),
+        overrides_actuales,
+        callback_confirmar,
+    )
 
 
 def abrir_crear_recibo(contenedor_tabla, filtro_tipo=None):
@@ -496,6 +750,10 @@ def abrir_crear_recibo(contenedor_tabla, filtro_tipo=None):
 
     alumnos = obtener_alumnos()
     tutores = obtener_tutores()
+
+    # overrides_ref: lista de 1 elemento para poder mutar desde lambdas
+    # None = sin overrides, dict = overrides confirmados por mes
+    overrides_ref = [{}]
 
     # ══ ZONA SUPERIOR: dos columnas ══════════════════════════════════════
     zona_sup = tk.Frame(modal, padx=16)
@@ -586,7 +844,7 @@ def abrir_crear_recibo(contenedor_tabla, filtro_tipo=None):
     zona_inf.columnconfigure(0, weight=1)
     zona_inf.columnconfigure(1, weight=1)
 
-    # ── Columna izquierda: Datos del Pago (sin Descripción) ───────────────
+    # ── Columna izquierda: Datos del Pago ─────────────────────────────────
     col_pago = tk.LabelFrame(zona_inf, text="Datos del Pago",
                              font=("Arial", 10, "bold"), padx=12, pady=10)
     col_pago.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
@@ -625,10 +883,39 @@ def abrir_crear_recibo(contenedor_tabla, filtro_tipo=None):
                    command=lambda: _toggle_parcial(var_parcial, frame_parcial)
                    ).grid(row=4, column=0, sticky="w", pady=(0, 4))
 
-    # ── Columna derecha: Meses a pagar ────────────────────────────────────
+    # ── Columna derecha: Meses + botón de ajuste ──────────────────────────
+    col_meses = tk.LabelFrame(zona_inf, text="Meses a pagar",
+                              font=("Arial", 10, "bold"), padx=12, pady=10)
+    col_meses.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+    col_meses.columnconfigure(0, weight=1)
+
+    # Selector de meses con callback on_change
     frame_meses, vars_mes = crear_selector_meses(
-        zona_inf, mes_actual_idx=date.today().month - 1)
-    frame_meses.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        col_meses, mes_actual_idx=date.today().month - 1,
+        on_change=lambda: _actualizar_boton_ajuste(
+            vars_mes, btn_ajuste, lbl_aviso, overrides_ref))
+    frame_meses.config(bd=0)
+    frame_meses.grid(row=0, column=0, sticky="w")
+
+    # Aviso que aparece cuando hay 2+ meses
+    lbl_aviso = tk.Label(col_meses,
+                         text="Mora y descuento se aplican igual a todos los meses.",
+                         font=("Arial", 7), fg="#888", wraplength=160)
+    lbl_aviso.grid(row=1, column=0, sticky="w", pady=(4, 2))
+    lbl_aviso.grid_remove()
+
+    # Botón de ajuste — oculto hasta que haya 2+ meses
+    btn_ajuste = tk.Button(
+        col_meses, text="⚙ Ajustar por mes", bg="#2980b9", fg="white",
+        font=("Arial", 9, "bold"), relief="groove",
+        pady=4, cursor="hand2",
+        command=lambda: _on_abrir_ajuste_por_mes(
+            modal, vars_mes, entry_monto, entry_desc,
+            combo_modo_desc, entry_mora, combo_modo_mora,
+            overrides_ref, btn_ajuste, lbl_aviso))
+    btn_ajuste.grid(row=2, column=0, sticky="ew", pady=(2, 0))
+    btn_ajuste.grid_remove()
+    _aplicar_hover(btn_ajuste, "#2980b9", "#1a5276")
 
     # ══ DESCRIPCIÓN: abajo, ancho completo ═══════════════════════════════
     zona_desc = tk.LabelFrame(modal, text="Descripción",
@@ -648,6 +935,18 @@ def abrir_crear_recibo(contenedor_tabla, filtro_tipo=None):
         "<<ComboboxSelected>>",
         lambda e: _on_alumno_seleccionado(combo_alumno, entry_monto))
 
+    # Cuando cambian mora/desc en el formulario principal, avisar si hay overrides
+    entry_mora.bind(
+        "<FocusOut>",
+        lambda e: _on_cambio_mora_desc_principal(
+            entry_mora, entry_desc, combo_modo_mora, combo_modo_desc,
+            overrides_ref, vars_mes, btn_ajuste, lbl_aviso))
+    entry_desc.bind(
+        "<FocusOut>",
+        lambda e: _on_cambio_mora_desc_principal(
+            entry_mora, entry_desc, combo_modo_mora, combo_modo_desc,
+            overrides_ref, vars_mes, btn_ajuste, lbl_aviso))
+
     # ── Botones ───────────────────────────────────────────────────────────
     br = tk.Frame(modal)
     br.pack(pady=12)
@@ -662,7 +961,7 @@ def abrir_crear_recibo(contenedor_tabla, filtro_tipo=None):
                                 entry_desc, entry_mora, combo_forma,
                                 entry_descripcion, entry_emisor,
                                 var_parcial, var_monto_pagado,
-                                tutores,
+                                tutores, overrides_ref,
                                 combo_modo_desc.get(), combo_modo_mora.get()))
     btn_guardar.pack(side="left", padx=8)
     _aplicar_hover(btn_guardar, "#27ae60", "#1e8449")
@@ -835,7 +1134,6 @@ def abrir_crear_recibos_multiples(contenedor_tabla, filtro_tipo=None):
     modal.resizable(True, True)
     modal.minsize(800, 600)
 
-    # Centrar adaptándose a la pantalla disponible
     modal.update_idletasks()
     sw      = modal.winfo_screenwidth()
     sh      = modal.winfo_screenheight()
@@ -845,11 +1143,9 @@ def abrir_crear_recibos_multiples(contenedor_tabla, filtro_tipo=None):
     y       = (sh - alto)  // 2
     modal.geometry(f"{ancho}x{alto}+{x}+{y}")
 
-    # ── Título ────────────────────────────────────────────────────────────
     tk.Label(modal, text="Crear Recibos para Múltiples Alumnos",
              font=("Arial", 14, "bold"), pady=10).pack()
 
-    # ── Datos comunes ─────────────────────────────────────────────────────
     panel_top = tk.LabelFrame(modal, text="Datos Generales y Pagos",
                               font=("Arial", 10, "bold"), padx=14, pady=10)
     panel_top.pack(fill="x", padx=16, pady=(0, 6))
@@ -900,12 +1196,10 @@ def abrir_crear_recibos_multiples(contenedor_tabla, filtro_tipo=None):
     entry_emisor.grid(row=1, column=4, columnspan=2,
                       sticky="ew", padx=6, pady=4)
 
-    # ── Selector de meses horizontal ──────────────────────────────────────
     frame_meses, vars_mes = crear_selector_meses_horizontal(
         modal, mes_actual_idx=date.today().month - 1)
     frame_meses.pack(fill="x", padx=16, pady=(0, 6))
 
-    # ── Barra búsqueda y selección ────────────────────────────────────────
     barra_frame = tk.LabelFrame(modal, text="Búsqueda y Selección",
                                 font=("Arial", 10, "bold"), padx=10, pady=6)
     barra_frame.pack(fill="x", padx=16, pady=(0, 6))
@@ -933,7 +1227,6 @@ def abrir_crear_recibos_multiples(contenedor_tabla, filtro_tipo=None):
     btn_ninguno.pack(side="left", padx=4)
     _aplicar_hover(btn_ninguno, "#e74c3c", "#c0392b")
 
-    # ── Botones (ANTES de la tabla para que siempre sean visibles) ─────────
     br = tk.Frame(modal)
     br.pack(side="bottom", pady=10)
 
@@ -960,7 +1253,6 @@ def abrir_crear_recibos_multiples(contenedor_tabla, filtro_tipo=None):
     btn_cancelar.pack(side="left", padx=8)
     _aplicar_hover(btn_cancelar, "#7f8c8d", "#626f70")
 
-    # ── Tabla alumnos (se empaqueta DESPUÉS de los botones) ───────────────
     panel_tabla = tk.LabelFrame(modal, text="Alumnos Activos",
                                 font=("Arial", 10, "bold"), padx=6, pady=6)
     panel_tabla.pack(fill="both", expand=True, padx=16, pady=(0, 4))
@@ -975,7 +1267,6 @@ def abrir_crear_recibos_multiples(contenedor_tabla, filtro_tipo=None):
     _poblar_tabla_multi(frame_tabla, todos_alumnos, filas_data,
                         combo_tipo.current() == 0, lbl_sel)
 
-    # ── Bindings ──────────────────────────────────────────────────────────
     combo_tipo.bind(
         "<<ComboboxSelected>>",
         lambda e: _on_tipo_cambio_multi(
@@ -1040,13 +1331,11 @@ def abrir_vista_deudores():
     v.title("Deudores por Mes")
     centrar(v, 800, 580)
 
-    # ── Header ────────────────────────────────────────────────────────────
     header = tk.Frame(v, bg="#d0d3d8")
     header.pack(fill="x")
     tk.Label(header, text="Ver Deudores de Mes", font=("Arial", 14, "bold"),
              bg="#d0d3d8", fg="#2c3e50").pack(side="left", padx=16, pady=8)
 
-    # ── Filtros ───────────────────────────────────────────────────────────
     filtros = tk.LabelFrame(v, text="Filtros", font=("Arial", 9, "bold"),
                             padx=10, pady=6)
     filtros.pack(fill="x", padx=12, pady=(8, 4))
@@ -1069,11 +1358,9 @@ def abrir_vista_deudores():
     btn_buscar.pack(side="left")
     _aplicar_hover(btn_buscar, "#2c3e50", "#1a252f")
 
-    # ── Tabla ─────────────────────────────────────────────────────────────
     contenedor = tk.Frame(v)
     contenedor.pack(fill="both", expand=True, padx=12, pady=4)
 
-    # ── Pie ───────────────────────────────────────────────────────────────
     pie = tk.Frame(v)
     pie.pack(pady=6)
 
@@ -1151,11 +1438,8 @@ def _cargar_alumnos_al_dia(combo_mes, entry_buscar, var_estado,
 
     for i, r in enumerate(rows, start=1):
         es_al_dia = r["estado"] == "Al día"
-
-        # BUG FIX: color de fila ligado al estado, no a la alerta
         bg = "#d5f5e3" if es_al_dia else "#fde8e8"
 
-        # BUG FIX: alerta solo tiene sentido si está en deuda
         if es_al_dia:
             alerta_txt   = "—"
             alerta_color = "#888"
@@ -1175,9 +1459,7 @@ def _cargar_alumnos_al_dia(combo_mes, entry_buscar, var_estado,
             alerta_txt,
         ]
         colores_txt = [
-            "#333",
-            "#333",
-            "#333",
+            "#333", "#333", "#333",
             "#27ae60" if es_al_dia else "#c0392b",
             "#333",
             alerta_color,
@@ -1193,14 +1475,12 @@ def abrir_vista_alumnos_al_dia():
     v.title("Estado de Alumnos")
     centrar(v, 900, 620)
 
-    # ── Header ────────────────────────────────────────────────────────────
     header = tk.Frame(v, bg="#d0d3d8")
     header.pack(fill="x")
     tk.Label(header, text="Alumnos al Día / En Deuda",
              font=("Arial", 14, "bold"),
              bg="#d0d3d8", fg="#2c3e50").pack(side="left", padx=16, pady=8)
 
-    # ── Filtros ───────────────────────────────────────────────────────────
     filtros = tk.LabelFrame(v, text="Filtros", font=("Arial", 9, "bold"),
                             padx=10, pady=6)
     filtros.pack(fill="x", padx=12, pady=(8, 4))
@@ -1237,11 +1517,9 @@ def abrir_vista_alumnos_al_dia():
         tk.Radiobutton(fila2, text=txt, variable=var_estado,
                        value=txt).pack(side="left", padx=4)
 
-    # ── Tabla ─────────────────────────────────────────────────────────────
     contenedor = tk.Frame(v)
     contenedor.pack(fill="both", expand=True, padx=12, pady=4)
 
-    # ── Pie ───────────────────────────────────────────────────────────────
     pie = tk.Frame(v)
     pie.pack(pady=6)
 
@@ -1350,13 +1628,11 @@ def abrir_vista_pagos_mensuales():
     v.title("Pagos Mensuales")
     centrar(v, 1050, 660)
 
-    # ── Header ────────────────────────────────────────────────────────────
     header = tk.Frame(v, bg="#d0d3d8")
     header.pack(fill="x")
     tk.Label(header, text="Pagos Mensuales", font=("Arial", 14, "bold"),
              bg="#d0d3d8", fg="#2c3e50").pack(side="left", padx=16, pady=8)
 
-    # ── Filtros ───────────────────────────────────────────────────────────
     filtros = tk.LabelFrame(v, text="Filtros", font=("Arial", 9, "bold"),
                             padx=10, pady=6)
     filtros.pack(fill="x", padx=12, pady=(8, 4))
@@ -1393,11 +1669,9 @@ def abrir_vista_pagos_mensuales():
     btn_buscar.pack(side="left", padx=6)
     _aplicar_hover(btn_buscar, "#2c3e50", "#1a252f")
 
-    # ── Tabla ─────────────────────────────────────────────────────────────
     contenedor = tk.Frame(v)
     contenedor.pack(fill="both", expand=True, padx=12, pady=4)
 
-    # ── Pie ───────────────────────────────────────────────────────────────
     pie = tk.Frame(v)
     pie.pack(pady=6)
 
@@ -1473,7 +1747,6 @@ def _refrescar_pantalla(contenedor_tabla, combo_mes_filtro, combo_forma_filtro,
 def _mostrar_pantalla_recibos(parent, volver_callback, titulo, filtro_tipo=None):
     limpiar_frame(parent)
 
-    # ── Header ────────────────────────────────────────────────────────────
     header = tk.Frame(parent, bg="#2c3e50")
     header.pack(fill="x")
     btn_volver = tk.Button(header, text="< Volver", command=volver_callback,
@@ -1491,11 +1764,9 @@ def _mostrar_pantalla_recibos(parent, volver_callback, titulo, filtro_tipo=None)
     btn_gmail_cfg.pack(side="right", pady=8, padx=10)
     _aplicar_hover(btn_gmail_cfg, "#EA4335", "#c0392b")
 
-    # ══ ZONA SUPERIOR: dos columnas ══════════════════════════════════════
     panel_superior = tk.Frame(parent)
     panel_superior.pack(fill="x", padx=8, pady=(8, 4))
 
-    # ── COLUMNA IZQUIERDA: sidebar de gestión ─────────────────────────────
     sidebar = tk.Frame(panel_superior, bg="#ecf0f1")
     sidebar.pack(side="left", fill="y", padx=(0, 8))
 
@@ -1550,11 +1821,9 @@ def _mostrar_pantalla_recibos(parent, volver_callback, titulo, filtro_tipo=None)
     btn_pagos_mens.pack(fill="x")
     _aplicar_hover(btn_pagos_mens, "#8e44ad", "#7d3c98")
 
-    # ── COLUMNA DERECHA: filtros + acciones ───────────────────────────────
     panel_der = tk.Frame(panel_superior)
     panel_der.pack(side="left", fill="both", expand=True)
 
-    # — Búsqueda y Filtros —
     filtros_frame = tk.LabelFrame(panel_der, text="Búsqueda y Filtros",
                                   font=("Arial", 9, "bold"), padx=10, pady=8)
     filtros_frame.pack(fill="x", pady=(0, 4))
@@ -1602,7 +1871,6 @@ def _mostrar_pantalla_recibos(parent, volver_callback, titulo, filtro_tipo=None)
     combo_parcial.current(0)
     combo_parcial.pack(side="left", padx=(4, 0))
 
-    # — Acciones de Tabla —
     acciones_frame = tk.LabelFrame(panel_der, text="Acciones de Tabla",
                                    font=("Arial", 9, "bold"), padx=10, pady=6)
     acciones_frame.pack(fill="x", pady=(0, 4))
@@ -1647,11 +1915,9 @@ def _mostrar_pantalla_recibos(parent, volver_callback, titulo, filtro_tipo=None)
         tk.Label(leyenda, text=f"  {txt}  ", bg=col, fg="white",
                  font=("Arial", 7), padx=3).pack(side="left", padx=2)
 
-    # ══ ZONA INFERIOR: tabla sola, ancho completo ═════════════════════════
     contenedor_tabla = tk.Frame(parent)
     contenedor_tabla.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
-    # ── referencias mutables para botones de acción masiva ────────────────
     _vars_check = [[]]
     _rows       = [[]]
 

@@ -213,7 +213,6 @@ def crear_recibo(tutor_id, alumno_id, fecha_pago, monto, descripcion,
         conn.commit()
         cur.execute("SELECT pago_completo, monto_pagado FROM recibos WHERE id = ?", (nuevo_id,))
         fila_guardada = cur.fetchone()
-        print(f"DEBUG DB → pago_completo={fila_guardada[0]}, monto_pagado={fila_guardada[1]}")
     finally:
         conn.close()
     return nuevo_id

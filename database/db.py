@@ -24,12 +24,12 @@ def get_app_data_path():
 
 
 def get_db_path():
-    #resultado = os.path.join(get_app_data_path(), "club.db")
-    #return resultado
-    base      = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    resultado = os.path.join(base, "..", "data", "club.db")
-    resultado = os.path.normpath(resultado)
+    resultado = os.path.join(get_app_data_path(), "club.db")
     return resultado
+    #base      = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    #resultado = os.path.join(base, "..", "data", "club.db")
+    #resultado = os.path.normpath(resultado)
+    #return resultado
 
 def _aplicar_migraciones(conn):
     """
